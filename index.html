@@ -1,0 +1,136 @@
+<!--
+ * @Author: Tangoboy
+ * @Date: 2021-10-21 16:50:28
+ * @LastEditTime: 2021-10-23 17:24:47
+ * @LastEditors: Please set LastEditors
+ * @Description: In User Settings Edit
+ * @FilePath: \路哥的教程\index.html
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>视频字符化</title>
+    <style>
+        #player{
+            max-width: 200px;
+            max-height: 200px;
+        }
+        #canvas{
+            display: none;
+        }
+        #char{
+            font-family: Courier;
+            line-height: 0.72em;
+            font-size: 12px;
+            transform: scale(0.5);
+            transform-origin: 0 0;
+        }
+    </style>
+</head>
+<body>
+    <input id="file" type="file" /> <br/>
+    <video id="player" loop autoplay controls src=""></video>
+    <canvas id="canvas"></canvas><br/>
+    <div id="char"></div>
+</body>
+<script>
+    let $file = document.querySelector("#file");
+    let $player = document.querySelector("#player");
+    let $canvas = document.querySelector("#canvas");
+    let $char = document.querySelector("#char");
+
+    // input文件选择
+    $file.addEventListener("change", function(e){
+        
+        // 由于浏览器安全原因无法读取真实路径，所以借助FileReader获取Base64DataURI
+        let fileReader = new FileReader();
+        
+        fileReader.addEventListener("load", function(e){
+            $player.setAttribute('src', fileReader.result)
+        }, false);
+        fileReader.readAsDataURL($file.files[0]);
+    }, false);
+
+    
+    //播放器自定义render事件封装
+    $player.addEventListener("play", function(e){
+        let render = function(){
+            let event = new CustomEvent("render");
+            $player.dispatchEvent(event);
+
+            if(!$player.ended && !$player.paused){
+                requestAnimationFrame(render)
+            }
+        };
+        requestAnimationFrame(render)
+    }, false);
+
+
+    // 像素点转字符
+    function pixelsTransForm(imageData){
+        let pixelsData = imageData.data;
+        let width = imageData.width;
+        let height = imageData.height;
+        let charData = [];
+
+        for (let row = 0; row < height; row++) {
+            let rowData = [];
+
+            for (let col = 0; col < width; col++) {
+                let r = pixelsData[ (width*row+col ) *4 + 0];
+                let g = pixelsData[ (width*row+col ) *4 + 1];
+                let b = pixelsData[ (width*row+col ) *4 + 2];
+
+                // 搜索参考灰度计算公式
+                let grey = r * 0.299 + b* 0.587 + g * 0.114;
+
+                rowData.push({r, g, b, grey});
+                
+            }
+            charData.push(rowData);
+            
+        }
+
+        // 0 ~ 255 的灰度由黑色变成白色 过度的每个字符，为字符表，后面根据数组下标获取对应字符
+        let map = ['$', '8', '6', 'A', '3', '0', '7', '!', ':', '.', '&nbsp;'];
+
+        // 设置为true为彩色模式，false为灰色模式
+        let colorMode = true;
+
+        return charData.map(row=>{
+
+            return row.map(grey=>{
+                let char = map[Math.floor(grey.grey/256*map.length)];
+                return colorMode ? `<b style="color:rgb(${grey.r},${grey.g},${grey.b})">`+ char +'</b>' : char;
+            }).join('') + '<br/>';
+            
+        }).join('');
+    }
+
+    // 监听播放器自定义render事件
+    $player.addEventListener("render", function(e){
+
+        // 画布宽度（像素），同时决定字符化后每行宽度
+        const CANVAS_WIDTH = 100;
+
+        let ctx = $canvas.getContext("2d");
+        $canvas.width = CANVAS_WIDTH;
+        $canvas.height = CANVAS_WIDTH/$player.videoWidth*$player.videoHeight;
+
+        // 把播放器视频画面写入到canvas上
+        ctx.drawImage($player, 0, 0, $canvas.width, $canvas.height);
+
+        // 再充canvas上获取图像数据
+        let data = ctx.getImageData(0, 0, $canvas.width, $canvas.height);
+
+        let html = pixelsTransForm(data);
+
+        $char.innerHTML = html;
+
+    }, false);
+
+</script>
+</html>
